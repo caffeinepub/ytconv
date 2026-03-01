@@ -28,6 +28,7 @@ const LOADING_TIPS = [
 // ---- Types ----
 type Format = "mp3" | "mp4";
 type Quality = 64 | 128 | 192 | 256 | 320;
+type VideoQuality = "360" | "480" | "720" | "1080";
 type ConvertState = "idle" | "loading" | "success" | "error";
 
 interface ConvertResult {
@@ -36,45 +37,27 @@ interface ConvertResult {
 }
 
 // ---- Constants ----
-const SERVERS = [
-  "https://ds1.ezsrv.net/api/convert",
-  "https://ds2.ezsrv.net/api/convert",
-  "https://ds3.ezsrv.net/api/convert",
-];
+const LOADER_API_BASE = "https://loader.to/ajax";
+const POLL_INTERVAL_MS = 2500;
+const POLL_TIMEOUT_MS = 120000;
 
 const QUALITY_OPTIONS: Quality[] = [64, 128, 192, 256, 320];
+const VIDEO_QUALITY_OPTIONS: VideoQuality[] = ["360", "480", "720", "1080"];
 
 const YT_REGEX =
   /^(https?:\/\/)?(www\.)?(youtube\.com\/.*|youtu\.?be\/.*|m\.youtube\.com\/.*|music\.youtube\.com\/.*)$/;
-
-function getErrorMessage(code: string): string {
-  switch (code) {
-    case "live":
-      return "Something went wrong. Please check the video URL and try again.";
-    case "429":
-      return "This video can't be downloaded. Please try another video.";
-    case "age-restricted":
-      return "Age-restricted videos can't be downloaded.";
-    case "video-restricted":
-      return "This video is restricted in the server region.";
-    default:
-      return "Something went wrong. Please check the URL and try again.";
-  }
-}
-
-function pickServer(): string {
-  return SERVERS[Math.floor(Math.random() * SERVERS.length)];
-}
 
 // ---- Main App ----
 export default function App() {
   const [url, setUrl] = useState("");
   const [format, setFormat] = useState<Format>("mp3");
   const [quality, setQuality] = useState<Quality>(128);
+  const [videoQuality, setVideoQuality] = useState<VideoQuality>("720");
   const [state, setState] = useState<ConvertState>("idle");
   const [result, setResult] = useState<ConvertResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [tipIndex, setTipIndex] = useState(0);
+  const [progress, setProgress] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Cycle tips during loading
@@ -111,39 +94,84 @@ export default function App() {
     setState("loading");
     setErrorMsg("");
     setResult(null);
+    setProgress(0);
 
     try {
-      const server = pickServer();
-      const body = {
-        url: url.trim(),
-        quality: format === "mp3" ? quality : 0,
-        trim: false,
-        startT: 0,
-        endT: 0,
-      };
+      // Determine format string for loader.to
+      const loaderFormat = format === "mp3" ? "mp3" : videoQuality;
 
-      const res = await fetch(server, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      // Step 1: Start the conversion job
+      const startRes = await fetch(
+        `${LOADER_API_BASE}/download.php?start=1&end=1&format=${loaderFormat}&url=${encodeURIComponent(url.trim())}`,
+        {
+          headers: {
+            Accept: "application/json",
+            Referer: "https://loader.to/",
+          },
+        },
+      );
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+      if (!startRes.ok) {
+        throw new Error(`HTTP ${startRes.status}`);
       }
 
-      const data = await res.json();
+      const startData = await startRes.json();
 
-      if (data.status === "done" && data.url) {
-        setResult({ title: data.title || "Your file", url: data.url });
-        setState("success");
-      } else if (data.status === "failed") {
-        setErrorMsg(getErrorMessage(data.error || "unknown"));
+      if (!startData.success || !startData.id) {
+        setErrorMsg(
+          "This video could not be processed. It may be age-restricted, live, or unavailable.",
+        );
         setState("error");
-      } else {
-        setErrorMsg("Unexpected response from server. Please try again.");
-        setState("error");
+        return;
       }
+
+      // Step 2: Poll for completion
+      const jobId = startData.id;
+      const deadline = Date.now() + POLL_TIMEOUT_MS;
+
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+
+        const pollRes = await fetch(
+          `${LOADER_API_BASE}/progress.php?id=${jobId}`,
+          {
+            headers: {
+              Accept: "application/json",
+              Referer: "https://loader.to/",
+            },
+          },
+        );
+
+        if (!pollRes.ok) continue;
+
+        const pollData = await pollRes.json();
+        const pct = Math.min(Math.round((pollData.progress / 1000) * 100), 99);
+        setProgress(pct);
+
+        if (pollData.success === 1 && pollData.download_url) {
+          setResult({
+            title: "Your file is ready",
+            url: pollData.download_url,
+          });
+          setProgress(100);
+          setState("success");
+          return;
+        }
+
+        if (pollData.success === false || pollData.progress === -1) {
+          setErrorMsg(
+            "Conversion failed. The video may be unavailable or restricted.",
+          );
+          setState("error");
+          return;
+        }
+      }
+
+      // Timed out
+      setErrorMsg(
+        "Conversion timed out. Please try again with a shorter video.",
+      );
+      setState("error");
     } catch {
       setErrorMsg(
         "Connection error. Please check your internet and try again.",
@@ -163,6 +191,7 @@ export default function App() {
     setUrl("");
     setResult(null);
     setErrorMsg("");
+    setProgress(0);
     setTimeout(() => inputRef.current?.focus(), 50);
   }
 
@@ -351,16 +380,14 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Divider before quality (always reserve space, even when hidden) */}
-                    {format === "mp3" && (
-                      <div className="h-px bg-border/60 -mx-6 sm:-mx-8" />
-                    )}
+                    {/* Divider before quality */}
+                    <div className="h-px bg-border/60 -mx-6 sm:-mx-8" />
 
-                    {/* MP3 Quality */}
-                    <AnimatePresence>
-                      {format === "mp3" && (
+                    {/* Quality selector */}
+                    <AnimatePresence mode="wait">
+                      {format === "mp3" ? (
                         <motion.div
-                          key="quality"
+                          key="mp3-quality"
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: "auto" }}
                           exit={{ opacity: 0, height: 0 }}
@@ -385,6 +412,38 @@ export default function App() {
                                   }`}
                                 >
                                   {q}k
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key="mp4-quality"
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="space-y-2 pt-1">
+                            <p className="text-sm font-medium text-muted-foreground">
+                              Video Quality
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {VIDEO_QUALITY_OPTIONS.map((vq) => (
+                                <button
+                                  type="button"
+                                  key={vq}
+                                  onClick={() => setVideoQuality(vq)}
+                                  disabled={state === "loading"}
+                                  className={`px-3.5 py-1.5 rounded-lg text-sm font-medium border transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
+                                    videoQuality === vq
+                                      ? "bg-primary text-primary-foreground border-transparent shadow-orange-sm"
+                                      : "bg-muted border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                                  }`}
+                                >
+                                  {vq}p
                                 </button>
                               ))}
                             </div>
@@ -427,7 +486,26 @@ export default function App() {
                             transition={{ duration: 0.25 }}
                             className="space-y-2.5"
                           >
-                            <div className="progress-indeterminate" />
+                            {progress > 0 ? (
+                              <div className="space-y-1">
+                                <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                                  <motion.div
+                                    className="h-full rounded-full bg-primary"
+                                    initial={{ width: "0%" }}
+                                    animate={{ width: `${progress}%` }}
+                                    transition={{
+                                      duration: 0.4,
+                                      ease: "easeOut",
+                                    }}
+                                  />
+                                </div>
+                                <p className="text-center text-xs text-muted-foreground">
+                                  {progress}%
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="progress-indeterminate" />
+                            )}
                             <AnimatePresence mode="wait">
                               <motion.p
                                 key={tipIndex}
@@ -503,7 +581,7 @@ export default function App() {
                         {format.toUpperCase()}
                         {format === "mp3"
                           ? ` · ${quality}kbps`
-                          : " · Video + Audio"}
+                          : ` · ${videoQuality}p Video`}
                       </span>
                       <span className="text-xs text-muted-foreground/60">
                         Converted
