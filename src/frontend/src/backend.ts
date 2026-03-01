@@ -89,22 +89,70 @@ export class ExternalBlob {
         return this;
     }
 }
+export interface TransformationInput {
+    context: Uint8Array;
+    response: http_request_result;
+}
+export interface TransformationOutput {
+    status: bigint;
+    body: Uint8Array;
+    headers: Array<http_header>;
+}
+export interface http_header {
+    value: string;
+    name: string;
+}
+export interface http_request_result {
+    status: bigint;
+    body: Uint8Array;
+    headers: Array<http_header>;
+}
 export interface backendInterface {
-    ping(): Promise<string>;
+    getProgress(jobId: string): Promise<string>;
+    startConversion(youtubeUrl: string, format: string): Promise<string>;
+    transform(input: TransformationInput): Promise<TransformationOutput>;
 }
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
-    async ping(): Promise<string> {
+    async getProgress(arg0: string): Promise<string> {
         if (this.processError) {
             try {
-                const result = await this.actor.ping();
+                const result = await this.actor.getProgress(arg0);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.ping();
+            const result = await this.actor.getProgress(arg0);
+            return result;
+        }
+    }
+    async startConversion(arg0: string, arg1: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.startConversion(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.startConversion(arg0, arg1);
+            return result;
+        }
+    }
+    async transform(arg0: TransformationInput): Promise<TransformationOutput> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.transform(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.transform(arg0);
             return result;
         }
     }

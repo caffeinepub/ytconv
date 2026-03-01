@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Toaster } from "@/components/ui/sonner";
+import { useActor } from "@/hooks/useActor";
 import {
   AlertCircle,
   CheckCircle2,
@@ -37,7 +38,6 @@ interface ConvertResult {
 }
 
 // ---- Constants ----
-const LOADER_API_BASE = "https://loader.to/ajax";
 const POLL_INTERVAL_MS = 2500;
 const POLL_TIMEOUT_MS = 120000;
 
@@ -49,6 +49,7 @@ const YT_REGEX =
 
 // ---- Main App ----
 export default function App() {
+  const { actor } = useActor();
   const [url, setUrl] = useState("");
   const [format, setFormat] = useState<Format>("mp3");
   const [quality, setQuality] = useState<Quality>(128);
@@ -97,25 +98,16 @@ export default function App() {
     setProgress(0);
 
     try {
+      if (!actor) {
+        throw new Error("Actor not ready");
+      }
+
       // Determine format string for loader.to
       const loaderFormat = format === "mp3" ? "mp3" : videoQuality;
 
       // Step 1: Start the conversion job
-      const startRes = await fetch(
-        `${LOADER_API_BASE}/download.php?start=1&end=1&format=${loaderFormat}&url=${encodeURIComponent(url.trim())}`,
-        {
-          headers: {
-            Accept: "application/json",
-            Referer: "https://loader.to/",
-          },
-        },
-      );
-
-      if (!startRes.ok) {
-        throw new Error(`HTTP ${startRes.status}`);
-      }
-
-      const startData = await startRes.json();
+      const startJson = await actor.startConversion(url.trim(), loaderFormat);
+      const startData = JSON.parse(startJson);
 
       if (!startData.success || !startData.id) {
         setErrorMsg(
@@ -132,19 +124,8 @@ export default function App() {
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
 
-        const pollRes = await fetch(
-          `${LOADER_API_BASE}/progress.php?id=${jobId}`,
-          {
-            headers: {
-              Accept: "application/json",
-              Referer: "https://loader.to/",
-            },
-          },
-        );
-
-        if (!pollRes.ok) continue;
-
-        const pollData = await pollRes.json();
+        const pollJson = await actor.getProgress(jobId);
+        const pollData = JSON.parse(pollJson);
         const pct = Math.min(Math.round((pollData.progress / 1000) * 100), 99);
         setProgress(pct);
 
@@ -222,11 +203,6 @@ export default function App() {
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 h-14 flex items-center justify-between max-w-5xl">
           <div className="flex items-center gap-2.5">
-            <img
-              src="/assets/generated/ytconv-logo-transparent.dim_64x64.png"
-              alt="YTConv logo"
-              className="w-8 h-8 rounded"
-            />
             <span className="font-display font-bold text-xl tracking-tight">
               YT<span className="text-orange">Conv</span>
             </span>
@@ -805,11 +781,6 @@ export default function App() {
       <footer className="border-t border-border bg-card/30 px-4 py-8">
         <div className="container mx-auto max-w-4xl flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img
-              src="/assets/generated/ytconv-logo-transparent.dim_64x64.png"
-              alt=""
-              className="w-6 h-6 rounded opacity-70"
-            />
             <span className="font-display font-bold text-base text-foreground/70">
               YTConv
             </span>
