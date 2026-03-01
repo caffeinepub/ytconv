@@ -1,0 +1,188 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Outfit font face */
+@font-face {
+  font-family: "Outfit";
+  src: url("/assets/fonts/Outfit.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+  font-style: normal;
+}
+
+/* Cabinet Grotesk font face */
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/assets/fonts/CabinetGrotesk.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+  font-style: normal;
+}
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+
+    /* Dark gray / orange theme — single dark mode only */
+    --background: 0.17 0.005 260;
+    --foreground: 0.95 0 0;
+    --card: 0.21 0.005 260;
+    --card-foreground: 0.95 0 0;
+    --popover: 0.24 0.005 260;
+    --popover-foreground: 0.95 0 0;
+
+    /* Orange primary */
+    --primary: 0.68 0.2 45;
+    --primary-foreground: 0.1 0 0;
+
+    --secondary: 0.26 0.005 260;
+    --secondary-foreground: 0.85 0 0;
+
+    --muted: 0.24 0.005 260;
+    --muted-foreground: 0.6 0 0;
+
+    --accent: 0.68 0.2 45;
+    --accent-foreground: 0.1 0 0;
+
+    --destructive: 0.65 0.22 25;
+    --destructive-foreground: 0.98 0 0;
+
+    --border: 0.28 0.005 260;
+    --input: 0.28 0.005 260;
+    --ring: 0.68 0.2 45;
+
+    --chart-1: 0.68 0.2 45;
+    --chart-2: 0.6 0.118 184.704;
+    --chart-3: 0.398 0.07 227.392;
+    --chart-4: 0.828 0.189 84.429;
+    --chart-5: 0.769 0.188 70.08;
+
+    --sidebar: 0.19 0.005 260;
+    --sidebar-foreground: 0.95 0 0;
+    --sidebar-primary: 0.68 0.2 45;
+    --sidebar-primary-foreground: 0.1 0 0;
+    --sidebar-accent: 0.26 0.005 260;
+    --sidebar-accent-foreground: 0.85 0 0;
+    --sidebar-border: 0.28 0.005 260;
+    --sidebar-ring: 0.68 0.2 45;
+
+    /* Orange glow variables */
+    --orange-glow: oklch(0.68 0.2 45 / 0.2);
+    --orange-glow-strong: oklch(0.68 0.2 45 / 0.35);
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Outfit", sans-serif;
+  }
+}
+
+@layer utilities {
+  .orange-glow {
+    box-shadow: 0 0 24px var(--orange-glow), 0 0 8px var(--orange-glow);
+  }
+
+  .orange-glow-sm {
+    box-shadow: 0 0 12px var(--orange-glow), 0 2px 4px rgba(0, 0, 0, 0.4);
+  }
+
+  .card-shadow {
+    box-shadow:
+      0 0 0 1px oklch(0.32 0.01 260 / 0.8),
+      0 8px 40px rgba(0, 0, 0, 0.55),
+      0 2px 8px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0 oklch(1 0 0 / 0.04);
+  }
+
+  .text-orange {
+    color: oklch(var(--primary));
+  }
+
+  .bg-orange {
+    background-color: oklch(var(--primary));
+  }
+
+  .border-orange {
+    border-color: oklch(var(--primary));
+  }
+
+  .input-field {
+    background-color: oklch(var(--muted));
+    border: 1.5px solid oklch(var(--border));
+    color: oklch(var(--foreground));
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .input-field:focus {
+    border-color: oklch(var(--primary));
+    box-shadow: 0 0 0 3px var(--orange-glow);
+    outline: none;
+  }
+
+  .noise-bg {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+
+  /* Card inner divider */
+  .card-divider {
+    border-top: 1px solid oklch(0.28 0.005 260);
+    margin-left: -2rem;
+    margin-right: -2rem;
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+
+  /* Indeterminate progress bar for loading state */
+  .progress-indeterminate {
+    position: relative;
+    height: 3px;
+    background: oklch(0.28 0.005 260);
+    border-radius: 9999px;
+    overflow: hidden;
+  }
+
+  .progress-indeterminate::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -40%;
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      oklch(0.68 0.2 45),
+      oklch(0.78 0.18 55),
+      oklch(0.68 0.2 45),
+      transparent
+    );
+    border-radius: 9999px;
+    animation: progress-slide 1.6s ease-in-out infinite;
+  }
+
+  @keyframes progress-slide {
+    0% {
+      left: -40%;
+    }
+    100% {
+      left: 110%;
+    }
+  }
+
+  /* Hero orange text glow */
+  .hero-orange-text {
+    color: oklch(0.72 0.2 45);
+    text-shadow:
+      0 0 40px oklch(0.68 0.2 45 / 0.45),
+      0 0 80px oklch(0.68 0.2 45 / 0.2);
+  }
+}
